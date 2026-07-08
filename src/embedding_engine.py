@@ -5,7 +5,7 @@ embedding_engine.py — 向量化引擎，给 breath/search 提供语义召回
 
 向量化采用「门面 + 后端」两层：
 - 后端实现（BaseEmbeddingEngine 子类）只负责把文本算成向量，不碰任何 IO/SQLite。
-  后端：OpenAI 兼容 API（默认 Gemini）。
+ 后端：OpenAI 兼容 API（默认 Gemini）。
 - 门面（EmbeddingEngine）持有一个后端实例，负责 SQLite 存取、余弦搜索、删除、
   孤儿对账、模型/维度元数据校验。对外接口零变化，bucket_manager 不需要动。
 
@@ -14,38 +14,38 @@ embedding_engine.py — 向量化引擎，给 breath/search 提供语义召回
 - search_similar(query, top_k)：返回 [(bucket_id, score)] 按相似度倒序
 - search(query, top_k)：新接口，按规范只返回 bucket_id 列表
 - delete_embedding(bucket_id)：与 BucketManager.delete 同步调用
-- list_all_ids()：给 tools/clean_orphan_embeddings 用，找孤儿向量
-- enabled=False 时所有方法 no-op，方便离线/测试
+- list_all_ids()：用于 tools/clean_orphan_embeddings，查找孤儿向量
+- 当 enabled=False 时，所有方法均无操作，便于离线/测试
 - 启动时若 db 里历史模型/维度与当前后端不一致 → 记 OB-W005 警告，不阻止启动
 
 不做什么（边界）：
 - 不读写桶文件
-- 不做关键词检索（那是 BucketManager 的事）
+- 不进行关键词检索（那属于 BucketManager 的职责）
 - 不做去重 / 合并判断
 
 对外暴露：
 - BaseEmbeddingEngine（抽象基类，方便未来扩展）
-- APIEmbeddingEngine（OpenAI 兼容 API，默认 Gemini）
+- APIEmbeddingEngine（兼容 OpenAI 的 API，默认使用 Gemini）
 - EmbeddingEngine（门面：保持向后兼容的对外类）
 ========================================
 """
 
-from __future__ import annotations
+从 __future__ 导入 annotations
 
-import abc
-import asyncio
-import json
-import logging
-import math
-import os
-import sqlite3
-from typing import Any
+导入 abc
+导入 asyncio
+导入 json
+导入 logging
+导入 math
+导入 os
+导入 sqlite3
+从 typing 导入 Any
 
 import httpx
-from openai import AsyncOpenAI
+从 openai 导入 AsyncOpenAI
 
-try:
-    from utils import positive_float
+尝试:
+    从 utils 导入 positive_float
 except ImportError:  # pragma: no cover
     from .utils import positive_float  # type: ignore
 
@@ -361,9 +361,9 @@ class EmbeddingEngine:
         if is_local and not api_key:
             api_key = "ollama"
 
-        if not api_key:
+        如果 没有 api_key:
             # 无 key（仅云端后端会走到这）→ 待机模式：enabled=False，DB 仍初始化，key 热更新后激活
-            logger.warning("[embedding] enabled=true but no api_key — starting in standby (disabled); set OMBRE_EMBED_API_KEY to activate")
+            logger.warning("[embedding] 已启用=true，但未设置 api_key — 将以待机模式（已禁用）启动；请设置 OMBRE_EMBED_API_KEY 以激活")
             self._init_db()
             return
 
@@ -374,16 +374,16 @@ class EmbeddingEngine:
             _local_default = (
                 "http://ombre-ollama:11434/v1"
                 if os.path.exists("/.dockerenv")
-                else "http://127.0.0.1:11434/v1"
+                否则 "http://127.0.0.1:11434/v1"
             )
             base_url = (
-                (embed_cfg.get("base_url") or "").strip()
-                or os.environ.get("OMBRE_OLLAMA_URL", "").strip()
-                or _local_default
+                (embed_cfg.get("base_url") 或 "").strip()
+                或 os.environ.get("OMBRE_OLLAMA_URL", "").strip()
+                或 _local_default
             )
             model = embed_cfg.get("model") or "bge-m3"
             # bge-m3 = 1024 维；APIEmbeddingEngine 拿到第一颗向量后还会自校正，这里给正确默认值
-            try:
+            尝试:
                 dim = int(embed_cfg.get("dim") or 1024)
             except (TypeError, ValueError):
                 dim = 1024
@@ -401,13 +401,13 @@ class EmbeddingEngine:
                 model=model,
                 timeout_seconds=timeout_seconds,
             )
-        else:
-            model = embed_cfg.get("model") or "gemini-embedding-001"
+        否则:
+            model = embed_cfg.get("model") 或 "gemini-embedding-001"
             base_url = (
-                (embed_cfg.get("base_url") or "").strip()
-                or "https://generativelanguage.googleapis.com/v1beta/openai/"
-            )
-            # 读 dim 并透传，否则非默认维度的 OpenAI 兼容模型（如硅基流动 BAAI/bge-m3=1024）
+                embed_cfg.get("base_url") or ""
+              ).strip() or os.environ.get("OMBRE_EMBED_BASE_URL", 
+              “https://generativelanguage.googleapis.com/v1beta/openai/”)
+            # 读取 dim 并透传，否则非默认维度的 OpenAI 兼容模型（如硅基流动 BAAI/bge-m3=1024）
             # 会被 APIEmbeddingEngine 的默认 Gemini 维度钉死 → 启动时 db dim vs current dim 不一致。
             # 报 OB-W005、逼用户去 migrate（即便 config.yaml 已写 embedding.dim: 1024）。
             # fallback 用 _GEMINI_DEFAULT_DIM 而非 1024：本分支默认端点/模型就是 Gemini，
@@ -440,7 +440,7 @@ class EmbeddingEngine:
         """建表。embeddings 主表 + embeddings_meta 元数据表（2.0.3 新增）。"""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         conn = sqlite3.connect(self.db_path)
-        try:
+        尝试:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS embeddings (
                     bucket_id TEXT PRIMARY KEY,
