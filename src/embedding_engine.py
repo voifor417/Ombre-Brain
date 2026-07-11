@@ -406,7 +406,7 @@ class EmbeddingEngine:
             base_url = (
                 embed_cfg.get("base_url") or ""
               ).strip() or os.environ.get("OMBRE_EMBED_BASE_URL", 
-              “https://generativelanguage.googleapis.com/v1beta/openai/”)
+              "https://generativelanguage.googleapis.com/v1beta/openai/")
             # 读取 dim 并透传，否则非默认维度的 OpenAI 兼容模型（如硅基流动 BAAI/bge-m3=1024）
             # 会被 APIEmbeddingEngine 的默认 Gemini 维度钉死 → 启动时 db dim vs current dim 不一致。
             # 报 OB-W005、逼用户去 migrate（即便 config.yaml 已写 embedding.dim: 1024）。
