@@ -1,12 +1,12 @@
 """
 ========================================
-embedding_engine.py — 向量化引擎，给 breath/search 提供语义召回
+embedding_engine.py — 向量化引擎，为 breath/search 提供语义召回
 ========================================
 
 向量化采用「门面 + 后端」两层：
-- 后端实现（BaseEmbeddingEngine 子类）只负责把文本算成向量，不碰任何 IO/SQLite。
+- 后端实现（BaseEmbeddingEngine 子类）仅负责将文本转换为向量，不涉及任何 IO/SQLite 操作。
  后端：OpenAI 兼容 API（默认 Gemini）。
-- 门面（EmbeddingEngine）持有一个后端实例，负责 SQLite 存取、余弦搜索、删除、
+- 门面（EmbeddingEngine）持有一个后端实例，负责 SQLite 的存取、余弦搜索、删除等操作，
   孤儿对账、模型/维度元数据校验。对外接口零变化，bucket_manager 不需要动。
 
 关键行为：
@@ -45,9 +45,9 @@ import httpx
 从 openai 导入 AsyncOpenAI
 
 尝试:
-    从 utils 导入 positive_float
+从 utils 导入 positive_float
 except ImportError:  # pragma: no cover
-    from .utils import positive_float  # type: ignore
+    从 .utils 导入 positive_float  # type: ignore
 
 try:
     from provider_detect import (
