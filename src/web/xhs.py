@@ -1,7 +1,7 @@
 """
-web/xhs — 小红书链接解析路由
-POST /api/xhs-card   : 解析 XHS 链接 → 笔记结构化数据
-POST /api/xhs-images : 批量拉取图片 → base64
+web/xhs -- XHS link parsing routes
+POST /api/xhs-card   : parse XHS link -> structured note data
+POST /api/xhs-images : batch fetch images -> base64
 """
 
 from __future__ import annotations
@@ -35,7 +35,6 @@ def _extract_initial_state(html: str) -> dict[str, Any] | None:
         return None
     try:
         raw = m.group(1)
-        # XHS sometimes uses undefined; replace with null
         raw = re.sub(r"\bundefined\b", "null", raw)
         return json.loads(raw)
     except Exception:
@@ -44,27 +43,19 @@ def _extract_initial_state(html: str) -> dict[str, Any] | None:
 
 def _parse_note(state: dict[str, Any]) -> dict[str, Any] | None:
     try:
-        note_detail = (
-            state.get("note", {})
-            .get("noteDetailMap", {})
-        )
-        if not note_detail:
-            return None
-        note_id = next(iter(note_detail))
-        note = note_detail[note_id].get("note", {})
+        note = state["noteData"]["data"]["noteData"]
 
         title = note.get("title", "")
         desc = note.get("desc", "")
-        author = note.get("user", {}).get("nickname", "")
+        user = note.get("user", {})
+        author = user.get("nickName") or user.get("nickname", "")
 
-        image_list = note.get("imageList", [])
         images = []
-        for img in image_list:
-            url = (
-                img.get("urlDefault")
-                or img.get("url")
-                or (img.get("infoList") or [{}])[0].get("url", "")
-            )
+        for img in note.get("imageList", []):
+            url = img.get("url") or ""
+            if not url:
+                info = img.get("infoList", [])
+                url = info[0].get("url", "") if info else ""
             if url:
                 images.append(url)
 
@@ -73,11 +64,12 @@ def _parse_note(state: dict[str, Any]) -> dict[str, Any] | None:
         commented = interact.get("commentCount", "")
         collected = interact.get("collectedCount", "")
 
-        comments_raw = state.get("comment", {}).get("comments", [])
+        comments_raw = state["noteData"]["data"].get("commentData", {}).get("comments", [])
         comments = []
         for c in comments_raw[:10]:
+            u = c.get("user", {})
             comments.append({
-                "user": c.get("userInfo", {}).get("nickname", ""),
+                "user": u.get("nickName") or u.get("nickname", ""),
                 "content": c.get("content", ""),
                 "ipLocation": c.get("ipLocation", ""),
             })
@@ -98,7 +90,6 @@ def _parse_note(state: dict[str, Any]) -> dict[str, Any] | None:
 
 
 async def _fetch_xhs_note(url: str) -> dict[str, Any]:
-    # Handle short links (xhslink.com) → follow redirect
     async with httpx.AsyncClient(
         headers=_XHS_HEADERS,
         follow_redirects=True,
@@ -110,11 +101,11 @@ async def _fetch_xhs_note(url: str) -> dict[str, Any]:
 
     state = _extract_initial_state(html)
     if state is None:
-        return {"ok": False, "error": "无法提取页面数据，可能需要登录或链接已失效"}
+        return {"ok": False, "error": "unable to extract page data"}
 
     note = _parse_note(state)
     if note is None:
-        return {"ok": False, "error": "解析笔记结构失败"}
+        return {"ok": False, "error": "failed to parse note structure"}
 
     return {"ok": True, "note": note}
 
@@ -137,11 +128,11 @@ def register(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
-            return JSONResponse({"ok": False, "error": "请求体必须是 JSON"}, status_code=400)
+            return JSONResponse({"ok": False, "error": "request body must be JSON"}, status_code=400)
 
         url = (body.get("url") or "").strip()
         if not url:
-            return JSONResponse({"ok": False, "error": "缺少 url 字段"}, status_code=400)
+            return JSONResponse({"ok": False, "error": "missing url field"}, status_code=400)
 
         result = await _fetch_xhs_note(url)
         return JSONResponse(result)
@@ -151,11 +142,11 @@ def register(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
-            return JSONResponse({"ok": False, "error": "请求体必须是 JSON"}, status_code=400)
+            return JSONResponse({"ok": False, "error": "request body must be JSON"}, status_code=400)
 
         urls = body.get("urls") or []
         if not urls:
-            return JSONResponse({"ok": False, "error": "缺少 urls 字段"}, status_code=400)
+            return JSONResponse({"ok": False, "error": "missing urls field"}, status_code=400)
 
         img_headers = {
             **_XHS_HEADERS,
