@@ -20,7 +20,6 @@ from . import embedding
 from . import ollama_local
 from . import config_api
 from . import v3_debug
-from . import xhs
 
 
 _WEB_MODULES = (
@@ -41,7 +40,6 @@ _WEB_MODULES = (
     ("web.ollama_local", ollama_local.register),
     ("web.config_api", config_api.register),
     ("web.v3_debug", v3_debug.register),
-    ("web.xhs", xhs.register),
 )
 
 
