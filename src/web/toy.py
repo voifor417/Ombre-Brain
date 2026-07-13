@@ -1,16 +1,16 @@
 """
 web/toy -- BLE toy control relay
-GET  /api/toy/command          : toy.html polls this (x-toy-token header)
-POST /api/toy/command          : set command via JSON body (x-toy-token header)
+GET  /api/toy/command          : toy.html polls this (x-toy-token header or ?token=)
+POST /api/toy/command          : set command via JSON body (x-toy-token header or ?token=)
 GET  /api/toy/set?cmd=s3&token=xiaokeechoes : set command via query params (WebFetch-compatible)
-GET  /toy                      : serve toy.html control page
 """
 
 from __future__ import annotations
 
-import os
 from starlette.requests import Request
-from starlette.responses import Response, JSONResponse
+from starlette.responses import JSONResponse
+
+from . import _shared as sh
 
 _TOY_TOKEN = "xiaokeechoes"
 _current_cmd: str = ""
@@ -23,7 +23,6 @@ def _check_token(request: Request) -> bool:
 
 
 def register(mcp) -> None:
-    from . import _shared as sh
 
     @mcp.custom_route("/api/toy/command", methods=["GET"])
     async def toy_command_get(request: Request) -> JSONResponse:
@@ -47,8 +46,9 @@ def register(mcp) -> None:
     @mcp.custom_route("/api/toy/set", methods=["GET"])
     async def toy_set_get(request: Request) -> JSONResponse:
         global _current_cmd
-        if not _check_token(request):
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        err = sh._require_auth(request)
+        if err:
+            return err
         cmd = str(request.query_params.get("cmd", "") or "")
         _current_cmd = cmd
         return JSONResponse({"ok": True, "cmd": _current_cmd})
