@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>玩具控制</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #111; color: #eee; font-family: sans-serif; padding: 20px; }
+h1 { font-size: 18px; margin-bottom: 20px; color: #fff; }
+.card { background: #1e1e1e; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+.label { font-size: 12px; color: #888; margin-bottom: 8px; }
+.status { font-size: 14px; margin-bottom: 10px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #444; margin-right: 6px; }
+.dot.on { background: #4caf50; }
+.dot.err { background: #f44336; }
+button {
+  display: block; width: 100%; padding: 12px;
+  border: none; border-radius: 8px; font-size: 15px;
+  cursor: pointer; margin-top: 6px;
+}
+.btn-connect { background: #2979ff; color: #fff; }
+.btn-connect:disabled { background: #333; color: #666; cursor: default; }
+.btn-stop { background: #c62828; color: #fff; }
+.cmd-box { background: #0d0d0d; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #aef; font-family: monospace; margin-top: 8px; min-height: 28px; }
+.log { font-size: 11px; color: #666; margin-top: 8px; max-height: 120px; overflow-y: auto; }
+.log p { margin-bottom: 2px; }
+</style>
+</head>
+<body>
+<h1>🎮 玩具控制</h1>
+
+<div class="card">
+  <div class="label">入体（SL278B）</div>
+  <div class="status"><span class="dot" id="d-insert"></span><span id="s-insert">未连接</span></div>
+  <button class="btn-connect" id="btn-insert" onclick="connect('insert')">连接入体</button>
+</div>
+
+<div class="card">
+  <div class="label">吮吸（SL278B）</div>
+  <div class="status"><span class="dot" id="d-suck"></span><span id="s-suck">未连接</span></div>
+  <button class="btn-connect" id="btn-suck" onclick="connect('suck')">连接吮吸</button>
+</div>
+
+<div class="card">
+  <div class="label">当前指令</div>
+  <div class="cmd-box" id="cmd-display">—</div>
+  <button class="btn-stop" onclick="sendStop()">立刻停止</button>
+</div>
+
+<div class="card">
+  <div class="label">日志</div>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const OB_URL = 'https://xiaokeechoes.zeabur.app/api/toy/command';
+const TOY_TOKEN = 'xiaokeechoes';
+const FFE1 = 'ffe1';
+const FFE0 = '0000ffe0-0000-1000-8000-00805f9b34fb';
+
+const VIBE = {};
+for (let i = 1; i <= 10; i++) VIBE[String(i)] = new Uint8Array([0x55,0x03,0x00,0x00,0x01,i,0x00]);
+const SUCK = {};
+for (let i = 1; i <= 5; i++) SUCK[String(i)] = new Uint8Array([0x55,0x09,0x00,0x00,i,0x01,0x00]);
+const STOP_INSERT = new Uint8Array([0x55,0x03,0x00,0x00,0x00,0x00,0x00]);
+const STOP_SUCK   = new Uint8Array([0x55,0x09,0x00,0x00,0x00,0x00,0x00]);
+
+const state = { insert: null, suck: null };
+let lastCmd = '';
+let keepaliveTimer = null;
+let pollTimer = null;
+
+function log(msg) {
+  const el = document.getElementById('log');
+  const p = document.createElement('p');
+  p.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+  el.prepend(p);
+}
+
+function setStatus(role, connected, text) {
+  document.getElementById('d-' + role).className = 'dot' + (connected ? ' on' : '');
+  document.getElementById('s-' + role).textContent = text;
+  document.getElementById('btn-' + role).disabled = connected;
+}
+
+async function getChar(server, uuid) {
+  try {
+    const svc = await server.getPrimaryService(FFE0);
+    const chars = await svc.getCharacteristics();
+    for (const c of chars) if (c.uuid.includes(uuid)) return c;
+  } catch(e) {}
+  return null;
+}
+
+async function connect(role) {
+  try {
+    log(`请求${role === 'insert' ? '入体' : '吮吸'}设备...`);
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'SL278B' }],
+      optionalServices: [FFE0]
+    });
+    const server = await device.gatt.connect();
+    const char = await getChar(server, FFE1);
+    if (!char) { log('找不到FFE1特征'); return; }
+    state[role] = char;
+    setStatus(role, true, device.name);
+    log(`${role === 'insert' ? '入体' : '吮吸'}已连接`);
+    device.addEventListener('gattserverdisconnected', () => {
+      state[role] = null;
+      setStatus(role, false, '已断开');
+      log(`${role === 'insert' ? '入体' : '吮吸'}断开`);
+    });
+    if (!pollTimer) startLoop();
+  } catch(e) {
+    log('连接失败: ' + e.message);
+  }
+}
+
+async function writeChar(char, bytes) {
+  try { await char.writeValueWithoutResponse(bytes); } catch(e) {}
+}
+
+async function execCmd(cmd) {
+  document.getElementById('cmd-display').textContent = cmd || '—';
+  if (cmd === 'stop' || cmd === '') {
+    if (state.insert) await writeChar(state.insert, STOP_INSERT);
+    if (state.suck)   await writeChar(state.suck,   STOP_SUCK);
+    return;
+  }
+  if (cmd.startsWith('v') && VIBE[cmd.slice(1)] && state.insert)
+    await writeChar(state.insert, VIBE[cmd.slice(1)]);
+  if (cmd.startsWith('s') && SUCK[cmd.slice(1)] && state.suck)
+    await writeChar(state.suck, SUCK[cmd.slice(1)]);
+}
+
+async function sendStop() {
+  lastCmd = 'stop';
+  await execCmd('stop');
+}
+
+async function poll() {
+  try {
+    const res = await fetch(OB_URL, { headers: { 'x-toy-token': TOY_TOKEN } });
+    const data = await res.json();
+    const cmd = data.cmd || '';
+    if (cmd !== lastCmd) {
+      lastCmd = cmd;
+      log('指令: ' + (cmd || 'stop'));
+      await execCmd(cmd);
+    }
+  } catch(e) {}
+}
+
+function startLoop() {
+  pollTimer = setInterval(poll, 2000);
+  keepaliveTimer = setInterval(async () => {
+    if (lastCmd && lastCmd !== 'stop') await execCmd(lastCmd);
+  }, 1400);
+  log('轮询已启动');
+}
+</script>
+</body>
+</html>
