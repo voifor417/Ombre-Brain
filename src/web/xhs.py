@@ -17,6 +17,8 @@ import httpx
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from . import _shared as sh
+
 _MOBILE_UA = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
@@ -126,6 +128,9 @@ def register(mcp) -> None:
 
     @mcp.custom_route("/api/parse-xhs", methods=["GET"])
     async def parse_xhs(request: Request) -> JSONResponse:
+        err = sh._require_auth(request)
+        if err:
+            return err
         url = (request.query_params.get("url") or "").strip()
         if not url:
             return JSONResponse({"ok": False, "error": "missing url"}, status_code=400)
