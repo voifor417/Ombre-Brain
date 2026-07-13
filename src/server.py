@@ -678,14 +678,6 @@ async def release(bucket_id: str) -> str:
     )
 
 
-@mcp_extra.tool()
-async def pulse(include_archive: Optional[bool] = False) -> str:
-    """返回记忆系统状态摘要:固化/动态/归档/feel/plan/letter 数量、总占用、衰减引擎运行状态,以及所有桶的摘要列表。include_archive=True 同时返回归档区。"""
-    return await _with_notice(
-        _t_anchor.pulse(include_archive=include_archive),
-        op="pulse",
-        args={"include_archive": include_archive},
-    )
 
 
 @mcp_extra.tool()
@@ -783,6 +775,14 @@ async def dream(window_hours: Optional[int] = 48) -> str:
         op="dream",
         args={"window_hours": window_hours},
     )
+
+
+@mcp.tool()
+async def toy(cmd: Optional[str] = "") -> str:
+    """控制BLE玩具。cmd: s1-s5=吮吸强度, v1-v10=振动强度, stop或空串=停止"""
+    from web import toy as _w_toy
+    _w_toy.set_cmd(cmd or "")
+    return f"已发送指令: {cmd or 'stop'}"
 
 
 # =============================================================
