@@ -1,6 +1,7 @@
 """
 web/xhs -- XHS link parsing routes
 POST /api/xhs-card   : parse XHS link -> structured note data
+GET  /api/xhs-card   : same, url passed as ?url= query param
 POST /api/xhs-images : batch fetch images -> base64
 """
 
@@ -123,16 +124,19 @@ async def _fetch_image_b64(client: httpx.AsyncClient, img_url: str) -> dict[str,
 
 def register(mcp) -> None:
 
-    @mcp.custom_route("/api/xhs-card", methods=["POST"])
+    @mcp.custom_route("/api/xhs-card", methods=["GET", "POST"])
     async def xhs_card(request: Request) -> JSONResponse:
-        try:
-            body = await request.json()
-        except Exception:
-            return JSONResponse({"ok": False, "error": "request body must be JSON"}, status_code=400)
+        if request.method == "GET":
+            url = (request.query_params.get("url") or "").strip()
+        else:
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse({"ok": False, "error": "request body must be JSON"}, status_code=400)
+            url = (body.get("url") or "").strip()
 
-        url = (body.get("url") or "").strip()
         if not url:
-            return JSONResponse({"ok": False, "error": "missing url field"}, status_code=400)
+            return JSONResponse({"ok": False, "error": "missing url"}, status_code=400)
 
         result = await _fetch_xhs_note(url)
         return JSONResponse(result)
