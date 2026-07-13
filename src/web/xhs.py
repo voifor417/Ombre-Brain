@@ -124,11 +124,17 @@ async def _fetch_image_b64(client: httpx.AsyncClient, img_url: str) -> dict[str,
 
 def register(mcp) -> None:
 
-    @mcp.custom_route("/api/xhs", methods=["GET"])
+    @mcp.custom_route("/api/xhs", methods=["GET", "POST"])
     async def xhs_card_get(request: Request) -> JSONResponse:
         url = (request.query_params.get("url") or "").strip()
+        if not url and request.method == "POST":
+            try:
+                body = await request.json()
+                url = (body.get("url") or "").strip()
+            except Exception:
+                pass
         if not url:
-            return JSONResponse({"ok": False, "error": "missing url param"}, status_code=400)
+            return JSONResponse({"ok": False, "error": "missing url"}, status_code=400)
         result = await _fetch_xhs_note(url)
         return JSONResponse(result)
 
