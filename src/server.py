@@ -785,6 +785,14 @@ async def dream(window_hours: Optional[int] = 48) -> str:
     )
 
 
+@mcp_extra.tool()
+async def toy(cmd: Optional[str] = "") -> str:
+    """控制BLE玩具。cmd: s1-s5=吮吸强度, v1-v10=振动强度, stop或空串=停止"""
+    from web import toy as _w_toy
+    _w_toy.set_cmd(cmd or "")
+    return f"已发送指令: {cmd or 'stop'}"
+
+
 # =============================================================
 # Dashboard API endpoints (for lightweight Web UI)
 # 仪表板 API（轻量 Web UI 用）
