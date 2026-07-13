@@ -1,7 +1,7 @@
 """
 web/xhs -- XHS link parsing routes
 POST /api/xhs-card   : parse XHS link -> structured note data
-GET  /api/xhs        : same, url passed as ?url= query param
+GET  /api/parse-xhs  : same, url passed as ?url= query param (WebFetch compatible)
 POST /api/xhs-images : batch fetch images -> base64
 """
 
@@ -124,8 +124,8 @@ async def _fetch_image_b64(client: httpx.AsyncClient, img_url: str) -> dict[str,
 
 def register(mcp) -> None:
 
-    @mcp.custom_route("/api/xhs", methods=["GET", "POST"])
-    async def xhs_card_get(request: Request) -> JSONResponse:
+    @mcp.custom_route("/api/parse-xhs", methods=["GET", "POST"])
+    async def parse_xhs(request: Request) -> JSONResponse:
         url = (request.query_params.get("url") or "").strip()
         if not url and request.method == "POST":
             try:
