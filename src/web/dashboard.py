@@ -86,6 +86,17 @@ def register(mcp) -> None:
         from starlette.responses import RedirectResponse
         return RedirectResponse(url="/static/favicon.svg", status_code=301)
 
+    @mcp.custom_route("/toy", methods=["GET"])
+    async def toy_control(request: Request) -> Response:
+        from starlette.responses import HTMLResponse
+        toy_path = os.path.join(sh.repo_root, "frontend", "toy.html")
+        try:
+            with open(toy_path, "r", encoding="utf-8") as f:
+                html = f.read()
+            return HTMLResponse(html, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+        except FileNotFoundError:
+            return HTMLResponse("<h1>toy.html not found</h1>", status_code=404)
+
     @mcp.custom_route("/health", methods=["GET"])
     async def health_check(request: Request) -> Response:
         from starlette.responses import JSONResponse
