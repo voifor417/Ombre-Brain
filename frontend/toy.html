@@ -65,7 +65,7 @@ const SUCK = {};
 for (let i = 1; i <= 5; i++) SUCK[String(i)] = new Uint8Array([0x55,0x09,0x00,0x00,i,0x01,0x00]);
 const STOP_INSERT = new Uint8Array([0x55,0x03,0x00,0x00,0x00,0x00,0x00]);
 const STOP_SUCK   = new Uint8Array([0x55,0x09,0x00,0x00,0x00,0x00,0x00]);
-const STOP_THRUST = new Uint8Array([0x55,0x07,0x00,0x00,0x00,0x00]);
+const STOP_THRUST = new Uint8Array([0x55,0x07,0x00,0x00,0x00,0x00,0x00]);
 
 function hexBytes(h) {
   h = h.replace(/[^0-9a-fA-F]/g, '');
@@ -139,19 +139,20 @@ async function execOne(cmd) {
     return;
   }
   let m;
-  // 双旋钮：vib:模式,强度（Iker帧 55 03 03 00 M S）
+  // 双旋钮：vib:模式,强度（2026-07-18真机校准确认：原生帧 55 03 00 00 [模式] [强度] 00，
+  // 模式5=波浪；Iker文档帧 55 03 03 00 M S 真机无响应，已废弃）
   if ((m = cmd.match(/^vib:(\d+),(\d+)$/)) ) {
-    if (state.insert) await writeChar(state.insert, new Uint8Array([0x55,0x03,0x03,0x00,+m[1],+m[2]]));
+    if (state.insert) await writeChar(state.insert, new Uint8Array([0x55,0x03,0x00,0x00,+m[1],+m[2],0x00]));
     return;
   }
-  // 伸缩：thr:档位（Iker脉冲帧 55 07 00 00 Z 00）
+  // 伸缩：thr:档位（07帧补齐为原生7字节 55 07 00 00 Z 00 00，待真机验证）
   if ((m = cmd.match(/^thr:(\d+)$/)) ) {
-    if (state.insert) await writeChar(state.insert, new Uint8Array([0x55,0x07,0x00,0x00,+m[1],0x00]));
+    if (state.insert) await writeChar(state.insert, new Uint8Array([0x55,0x07,0x00,0x00,+m[1],0x00,0x00]));
     return;
   }
-  // 吮吸双旋钮：suk:模式,强度（待校准）
+  // 吮吸双旋钮：suk:模式,强度（按入体确认帧型推定 55 09 00 00 M S 00，待真机校准）
   if ((m = cmd.match(/^suk:(\d+),(\d+)$/)) ) {
-    if (state.suck) await writeChar(state.suck, new Uint8Array([0x55,0x09,0x00,0x00,+m[1],+m[2]]));
+    if (state.suck) await writeChar(state.suck, new Uint8Array([0x55,0x09,0x00,0x00,+m[1],+m[2],0x00]));
     return;
   }
   // 原始字节：raw:HEX→入体，raws:HEX→吮吸（校准试错用）
