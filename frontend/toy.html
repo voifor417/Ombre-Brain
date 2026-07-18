@@ -65,6 +65,14 @@ const SUCK = {};
 for (let i = 1; i <= 5; i++) SUCK[String(i)] = new Uint8Array([0x55,0x09,0x00,0x00,i,0x01,0x00]);
 const STOP_INSERT = new Uint8Array([0x55,0x03,0x00,0x00,0x00,0x00,0x00]);
 const STOP_SUCK   = new Uint8Array([0x55,0x09,0x00,0x00,0x00,0x00,0x00]);
+const STOP_THRUST = new Uint8Array([0x55,0x07,0x00,0x00,0x00,0x00]);
+
+function hexBytes(h) {
+  h = h.replace(/[^0-9a-fA-F]/g, '');
+  const a = [];
+  for (let i = 0; i + 1 < h.length; i += 2) a.push(parseInt(h.substr(i, 2), 16));
+  return new Uint8Array(a);
+}
 
 const state = { insert: null, suck: null };
 let lastCmd = '';
@@ -121,17 +129,50 @@ async function writeChar(char, bytes) {
   try { await char.writeValueWithoutResponse(bytes); } catch(e) {}
 }
 
-async function execCmd(cmd) {
-  document.getElementById('cmd-display').textContent = cmd || '—';
+async function execOne(cmd) {
   if (cmd === 'stop' || cmd === '') {
-    if (state.insert) await writeChar(state.insert, STOP_INSERT);
-    if (state.suck)   await writeChar(state.suck,   STOP_SUCK);
+    if (state.insert) {
+      await writeChar(state.insert, STOP_INSERT);
+      await writeChar(state.insert, STOP_THRUST);
+    }
+    if (state.suck) await writeChar(state.suck, STOP_SUCK);
     return;
   }
+  let m;
+  // 双旋钮：vib:模式,强度（Iker帧 55 03 03 00 M S）
+  if ((m = cmd.match(/^vib:(\d+),(\d+)$/)) ) {
+    if (state.insert) await writeChar(state.insert, new Uint8Array([0x55,0x03,0x03,0x00,+m[1],+m[2]]));
+    return;
+  }
+  // 伸缩：thr:档位（Iker脉冲帧 55 07 00 00 Z 00）
+  if ((m = cmd.match(/^thr:(\d+)$/)) ) {
+    if (state.insert) await writeChar(state.insert, new Uint8Array([0x55,0x07,0x00,0x00,+m[1],0x00]));
+    return;
+  }
+  // 吮吸双旋钮：suk:模式,强度（待校准）
+  if ((m = cmd.match(/^suk:(\d+),(\d+)$/)) ) {
+    if (state.suck) await writeChar(state.suck, new Uint8Array([0x55,0x09,0x00,0x00,+m[1],+m[2]]));
+    return;
+  }
+  // 原始字节：raw:HEX→入体，raws:HEX→吮吸（校准试错用）
+  if ((m = cmd.match(/^raw:([0-9a-fA-F ]+)$/)) ) {
+    if (state.insert) await writeChar(state.insert, hexBytes(m[1]));
+    return;
+  }
+  if ((m = cmd.match(/^raws:([0-9a-fA-F ]+)$/)) ) {
+    if (state.suck) await writeChar(state.suck, hexBytes(m[1]));
+    return;
+  }
+  // 旧版指令，保持兼容
   if (cmd.startsWith('v') && VIBE[cmd.slice(1)] && state.insert)
     await writeChar(state.insert, VIBE[cmd.slice(1)]);
   if (cmd.startsWith('s') && SUCK[cmd.slice(1)] && state.suck)
     await writeChar(state.suck, SUCK[cmd.slice(1)]);
+}
+
+async function execCmd(cmd) {
+  document.getElementById('cmd-display').textContent = cmd || '—';
+  for (const part of String(cmd).split(';')) await execOne(part.trim());
 }
 
 async function sendStop() {

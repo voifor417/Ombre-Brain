@@ -779,7 +779,12 @@ async def dream(window_hours: Optional[int] = 48) -> str:
 
 @mcp.tool()
 async def toy(cmd: Optional[str] = "") -> str:
-    """控制BLE玩具。cmd: s1-s5=吮吸强度, v1-v10=振动强度, stop或空串=停止"""
+    """控制BLE玩具。cmd 支持：
+    stop或空串=全停；v1-v10 / s1-s5 = 旧版兼容指令；
+    vib:M,S = 入体振动，模式M(1-11)+强度S(0-10)；thr:Z = 入体伸缩档位Z(0-7)；
+    suk:M,S = 吮吸，模式M(1-5)+强度S(0-10)（字节序待真机校准）；
+    raw:HEX / raws:HEX = 向入体/吮吸发送原始字节（校准试错用）；
+    多条指令用分号连发，如 vib:1,8;suk:3,5"""
     from web import toy as _w_toy
     _w_toy.set_cmd(cmd or "")
     return f"已发送指令: {cmd or 'stop'}"
