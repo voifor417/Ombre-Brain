@@ -785,7 +785,8 @@ async def toy(cmd: Optional[str] = "") -> str:
     thr:Z = 入体伸缩档位Z(0-7)（待真机验证）；
     suk:M,S = 吮吸，模式M+强度S（帧型按入体推定，待真机校准）；
     raw:HEX / raws:HEX = 向入体/吮吸发送原始字节（校准试错用）；
-    多条指令用分号连发，如 vib:1,8;suk:3,5"""
+    多条指令用分号连发，如 vib:1,8;suk:3,5。
+    死人开关：非stop指令10分钟未刷新自动归stop；长时间维持同档需定期重发。"""
     from web import toy as _w_toy
     _w_toy.set_cmd(cmd or "")
     return f"已发送指令: {cmd or 'stop'}"

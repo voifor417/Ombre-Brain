@@ -75,7 +75,9 @@ function hexBytes(h) {
 }
 
 const state = { insert: null, suck: null };
+const WATCHDOG_MS = 90000; // 与服务器失联超过90秒，本地自动全停
 let lastCmd = '';
+let lastPollOk = 0;
 let keepaliveTimer = null;
 let pollTimer = null;
 
@@ -185,6 +187,7 @@ async function poll() {
   try {
     const res = await fetch(OB_URL, { headers: { 'x-toy-token': TOY_TOKEN } });
     const data = await res.json();
+    lastPollOk = Date.now();
     const cmd = data.cmd || '';
     if (cmd !== lastCmd) {
       lastCmd = cmd;
@@ -195,11 +198,18 @@ async function poll() {
 }
 
 function startLoop() {
+  lastPollOk = Date.now();
   pollTimer = setInterval(poll, 2000);
   keepaliveTimer = setInterval(async () => {
-    if (lastCmd && lastCmd !== 'stop') await execCmd(lastCmd);
+    if (!lastCmd || lastCmd === 'stop') return;
+    if (Date.now() - lastPollOk > WATCHDOG_MS) {
+      log('失联超90秒，看门狗自动停止');
+      await sendStop();
+      return;
+    }
+    await execCmd(lastCmd);
   }, 1400);
-  log('轮询已启动');
+  log('轮询已启动（看门狗90秒）');
 }
 </script>
 </body>
